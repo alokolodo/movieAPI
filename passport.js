@@ -1,41 +1,44 @@
-const passport = require('passport');
-const LocalStrategy = require('passport-local').Strategy;
-const JWTStrategy = require('passport-jwt').Strategy;
-const ExtractJWT = require('passport-jwt').ExtractJwt;
+const passport = require('passport'),
+  LocalStrategy = require('passport-local').Strategy,
+  JWTStrategy = require('passport-jwt').Strategy,
+  ExtractJWT = require('passport-jwt').ExtractJwt;
+
 const { User } = require('./models');
 
 passport.use(new LocalStrategy({
   usernameField: 'username',
   passwordField: 'password'
-}, async (username, password, callback) => {
-  try {
-    const user = await User.findOne({ username: username });
+}, (username, password, callback) => {
+  console.log(username + '  ' + password);
+  User.findOne({ username: username }, (error, user) => {
+    if (error) {
+      console.log(error);
+      return callback(error);
+    }
     if (!user) {
-      console.error('User not found');
+      console.log('incorrect username');
       return callback(null, false, { message: 'Incorrect username or password.' });
     }
-
     if (!user.validatePassword(password)) {
-      console.error('Incorrect password');
-      return callback(null, false, { message: 'Incorrect username or password.' });
+      console.log('incorrect password');
+      return callback(null, false, { message: 'Incorrect password.' });
     }
-
+    console.log('finished');
     return callback(null, user);
-  } catch (err) {
-    console.error('Error finding user:', err);
-    return callback(err);
-  }
+  });
 }));
 
-const jwtSecret = 'your_jwt_secret';
-passport.use(new JWTStrategy({
+const opts = {
   jwtFromRequest: ExtractJWT.fromAuthHeaderAsBearerToken(),
-  secretOrKey: jwtSecret
-}, async (jwtPayload, callback) => {
-  try {
-    const user = await User.findById(jwtPayload._id);
-    return callback(null, user);
-  } catch (err) {
-    return callback(err);
-  }
+  secretOrKey: 'your_jwt_secret'
+};
+
+passport.use(new JWTStrategy(opts, (jwtPayload, callback) => {
+  return User.findById(jwtPayload._id)
+    .then(user => {
+      return callback(null, user);
+    })
+    .catch(error => {
+      return callback(error)
+    });
 }));
