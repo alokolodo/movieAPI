@@ -3,14 +3,12 @@ const mongoose = require('mongoose');
 const morgan = require('morgan');
 const path = require('path');
 const passport = require('passport');
+const cors = require('cors');
 const { Movie, User } = require('./models');
 const auth = require('./auth'); // Correctly import auth.js
-const cors = require('cors');
-const app = express();
-const { body, validationResult } = require('express-validator');
-const cors = require('cors');
-app.use(cors());
+require('./passport'); // Ensure passport strategies are loaded
 
+const app = express();
 
 app.use(morgan('common'));
 app.use(express.json());
@@ -18,7 +16,8 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(cors());
 
-mongoose.connect('mongodb://localhost:27017/movieDB', { useNewUrlParser: true, useUnifiedTopology: true })
+mongoose.connect('mongodb+srv://<username>:<password>@<cluster-url>/myFlixDB?retryWrites=true&w=majority', 
+  { useNewUrlParser: true, useUnifiedTopology: true })
   .then(() => console.log('MongoDB connected'))
   .catch(err => console.error('MongoDB connection error:', err));
 
@@ -27,7 +26,7 @@ app.get('/', (req, res) => {
 });
 
 // Use the auth routes
-app.use('/', auth);
+auth(app);
 
 // Define all other routes
 app.get('/movies', passport.authenticate('jwt', { session: false }), async (req, res) => {
@@ -81,25 +80,14 @@ app.get('/directors/:name', passport.authenticate('jwt', { session: false }), as
   }
 });
 
-app.post('/users', [
-  body('username').isLength({ min: 5}).withMessage('username must be at lest 5 charaters'),
-  body('password').isLength({ min: 8}).withMessage('password must be at least 8 charaters'),
-  body('email').isEmail().withMessage('email is not valid')
-], async (req, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()){
-    return res.status(422).json({ errors: errors.array() });
-  }
-
-
-  
+app.post('/users', async (req, res) => {
   try {
     const hashedPassword = User.hashPassword(req.body.password);
     const newUser = new User({
       username: req.body.username,
       password: hashedPassword,
       email: req.body.email,
-      birthdate: req.body.birthdate
+      birthday: req.body.birthday
     });
     await newUser.save();
     res.status(201).send(newUser);
@@ -109,16 +97,7 @@ app.post('/users', [
   }
 });
 
-app.put('/users/:username', 
-  [
-    body('username').isLength({ min: 5}).withMessage('username must be at lest 5 charaters'),
-    body('password').isLength({ min: 8}).withMessage('password must be at least 8 charaters'),
-    body('email').isEmail().withMessage('email is not valid')
-  ], async (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()){
-      return res.status(422).json({ errors: errors.array() });
-    }
+app.put('/users/:username', passport.authenticate('jwt', { session: false }), async (req, res) => {
   try {
     const updatedUser = await User.findOneAndUpdate(
       { username: req.params.username },
@@ -171,18 +150,24 @@ app.delete('/users/:username/movies/:movieId', passport.authenticate('jwt', { se
 
 app.delete('/users/:username', passport.authenticate('jwt', { session: false }), async (req, res) => {
   try {
-    const user = await User.findOneAndRemove({ username: req.params.username });
+    const user = await User.findOneAndDelete({ username: req.params.username });
     if (!user) {
       return res.status(404).send('User not found');
     }
-    res.status(200).send('User deleted');
+    res.json(user);
   } catch (err) {
     console.error('Error deleting user:', err);
     res.status(500).send('Internal server error');
   }
 });
 
+// Error handler
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err.stack);
+  res.status(500).send('Something broke!');
+});
+
 const port = process.env.PORT || 8080;
 app.listen(port, () => {
-  console.log(`Server is running on port ${port}`);
+  console.log(`Server is running on http://localhost:${port}`);
 });
