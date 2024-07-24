@@ -8,6 +8,8 @@ const auth = require('./auth'); // Correctly import auth.js
 const cors = require('cors');
 const app = express();
 const { body, validationResult } = require('express-validator');
+const cors = require('cors');
+app.use(cors());
 
 
 app.use(morgan('common'));
